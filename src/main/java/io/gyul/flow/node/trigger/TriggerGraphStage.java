@@ -15,9 +15,8 @@
  */
 package io.gyul.flow.node.trigger;
 
+import java.util.ArrayDeque;
 import java.util.Queue;
-
-import org.apache.commons.collections4.queue.CircularFifoQueue;
 
 import akka.stream.Attributes;
 import akka.stream.Outlet;
@@ -68,23 +67,26 @@ public class TriggerGraphStage extends GraphStage<SourceShape<Message>> {
 		@Override
 		public GraphStageLogic createLogic(Attributes inheritedAttributes) throws Exception {
 			return new GraphStageLogic(shape()) {
-				private Queue<Message> buffer = new CircularFifoQueue<>(BUFFER_SIZE);
+				private Queue<Message> buffer = new ArrayDeque<>(BUFFER_SIZE);
 				private boolean downstreamWaiting = false;
 				
 				@Override
 				public void preStart() {
 					log.info("[{}] started.", context.displayName());
 					callback = createAsyncCallback(m -> {
-							boolean added = buffer.offer(m);
-							if(!added) {
-								log.warn("[{}] message buffer is full.", context.displayName());
-//								context.markError(m, "Message buffer is full");
-							}
-							if (added && downstreamWaiting) {
+							if(buffer.size() >= BUFFER_SIZE) {
+								log.warn("[{}] Discarding message, buffer is full.", context.displayName());
+//								context.markError(m, "Discarding message, buffer is full");
+								return;
+							} 
+							buffer.add(m);
+							if (downstreamWaiting) {
 								downstreamWaiting = false;
-								Message bufferedMessage = buffer.poll();
-								push(out, bufferedMessage);
-//								context.checkOut();
+								Message message = buffer.poll();
+								if(message != null) {
+									push(out, message);
+									context.checkOut();
+								}
 							}
 						}
 					);
@@ -103,8 +105,12 @@ public class TriggerGraphStage extends GraphStage<SourceShape<Message>> {
 								downstreamWaiting = true;
 							} else {
 								Message message = buffer.poll();
-								push(out, message);
-//								context.checkOut();
+								if(message == null) {
+									downstreamWaiting = true;
+								} else {
+									push(out, message);
+//									context.checkOut();
+								}
 							}
 						}
 					});
