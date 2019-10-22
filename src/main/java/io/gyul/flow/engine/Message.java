@@ -18,8 +18,10 @@ package io.gyul.flow.engine;
 import java.util.Collection;
 
 import org.apache.commons.collections4.queue.CircularFifoQueue;
+import org.apache.commons.lang3.StringUtils;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import io.gyul.util.JsonUtils;
@@ -33,7 +35,7 @@ import lombok.Value;
 @Value(staticConstructor = "of")
 public class Message {
 	public static final String MESSAGE_ROOT = "message";
-	private static final int MAX_PATH_SIZE = 50;
+	private static final int MAX_PATH_SIZE = 100;
 	
 	private final long time;
 	private ObjectNode params;
@@ -51,6 +53,20 @@ public class Message {
 	
 	public static Message of(ObjectNode params, ObjectNode payload) {
 		return Message.of(System.currentTimeMillis(), params, payload);
+	}
+	
+	public void putPayload(String path, Object data) {
+		String[] tokens = StringUtils.split(path.trim(), JsonUtils.PATH_SEPARATOR);
+		String field = tokens[tokens.length - 1].trim();
+		ObjectNode node = payload;
+		for (int i = 0; i < tokens.length - 1; i++) {
+			node = node.with(tokens[i].trim());
+		}
+		if (data instanceof JsonNode) {
+			node.set(field, (JsonNode) data);
+		} else {
+			node.set(field, JsonUtils.toJsonNode(data));
+		}
 	}
 	
 	protected void addPath(String nodeId) {
